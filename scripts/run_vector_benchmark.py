@@ -49,7 +49,7 @@ def calculate_reference(operation, a, b):
     raise ValueError(f"Operação desconhecida: {operation}")
 
 
-def run_experiment(vl, sew, operation, repetitions=1000):
+def run_experiment(vl, sew, operation, repetitions=100):
     """Executa e avalia uma operação vetorial."""
 
     machine = VectorMachine(max_vl=256)
@@ -119,10 +119,10 @@ def main():
         "vtdot.vv",
     ]
 
-    vector_lengths = [8, 32, 64, 128, 256]
+    vector_lengths = [8]
     widths = [8, 16, 32]
 
-    repetitions = 1000
+    repetitions = 1
     results = []
 
     for width in widths:

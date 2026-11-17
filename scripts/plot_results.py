@@ -34,10 +34,10 @@ format_order = [
     "Takum T8",
     "Takum T16",
     "Takum T32",
+    "IEEE FP8 E4M3FN",
     "IEEE FP16",
     "IEEE FP32",
 ]
-
 dataset_order = list(datasets.values())
 
 # Gráfico 1: erro relativo médio.
@@ -119,6 +119,56 @@ axes[0].get_legend().remove()
 plt.suptitle("Comparação dos erros absolutos — referência Binary128")
 plt.tight_layout()
 plt.savefig(FIGURES_DIR / "erros_absolutos.png", dpi=300)
+plt.close()
+
+
+# Gráfico 4: erros da multiplicação matriz-vetor esparsa.
+sparse_file = RESULTS_DIR / "sparse_spmv_summary.csv"
+
+if not sparse_file.exists():
+    raise FileNotFoundError(f"Arquivo não encontrado: {sparse_file}")
+
+sparse_data = pd.read_csv(sparse_file)
+
+sparse_order = ["Takum T8", "Takum T16", "Takum T32"]
+sparse_data = (
+    sparse_data.set_index("format")
+    .reindex(sparse_order)
+)
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+sparse_data[["mae", "rmse"]].plot(
+    kind="bar",
+    ax=axes[0],
+    logy=True,
+)
+
+axes[0].set_title("Erros absolutos — SpMV")
+axes[0].set_ylabel("Erro (escala logarítmica)")
+axes[0].set_xlabel("Formato")
+axes[0].tick_params(axis="x", rotation=0)
+axes[0].grid(axis="y", alpha=0.3)
+
+sparse_data[["mean_relative_error"]].plot(
+    kind="bar",
+    ax=axes[1],
+    logy=True,
+    legend=False,
+)
+
+axes[1].set_title("Erro relativo médio — SpMV")
+axes[1].set_ylabel("Erro relativo (escala logarítmica)")
+axes[1].set_xlabel("Formato")
+axes[1].tick_params(axis="x", rotation=0)
+axes[1].grid(axis="y", alpha=0.3)
+
+plt.suptitle("Avaliação da multiplicação matriz-vetor esparsa")
+plt.tight_layout()
+plt.savefig(
+    FIGURES_DIR / "sparse_spmv_erros.png",
+    dpi=300,
+)
 plt.close()
 
 

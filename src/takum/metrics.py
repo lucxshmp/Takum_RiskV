@@ -149,11 +149,7 @@ def high_precision_reference(
     Converte os valores para mpmath com precisão arbitrária.
 
     precision representa a quantidade de dígitos decimais.
-    O padrão de 50 dígitos oferece precisão superior à
-    significanda de 113 bits do IEEE 754 binary128.
-
-    Observação: isso não implementa, por si só, o formato
-    IEEE 754 binary128.
+    Isso não implementa, por si só, o formato IEEE 754 binary128.
     """
 
     if precision < 1:
@@ -187,7 +183,7 @@ def quantize_takum(
 
 
 # ---------------------------------------------------------
-# QUANTIZAÇÃO IEEE 754
+# QUANTIZAÇÃO IEEE 754 FP16 E FP32
 # ---------------------------------------------------------
 
 def quantize_ieee(
@@ -222,6 +218,93 @@ def quantize_ieee(
             decoded = math.copysign(float("inf"), number)
 
         result.append(decoded)
+
+    return result
+
+
+# ---------------------------------------------------------
+# QUANTIZAÇÃO IEEE 754 FP8 E4M3FN
+# ---------------------------------------------------------
+
+def quantize_ieee_fp8(
+    values: Sequence[float]
+) -> list[float]:
+    """
+    Simula IEEE 754 FP8 E4M3FN.
+
+    Estrutura:
+    - 1 bit de sinal;
+    - 4 bits de expoente;
+    - 3 bits de fração;
+    - bias do expoente: 7;
+    - menor subnormal positivo: 2**-9;
+    - menor normal positivo: 2**-6;
+    - maior valor finito: 448.
+
+    O código 0x7F é reservado para NaN.
+    Não existe representação de infinito.
+
+    O arredondamento utiliza o valor representável mais próximo.
+    Em caso de empate, escolhe o código com bit menos significativo
+    igual a zero (ties to even).
+    """
+
+    # Gera todos os valores positivos finitos representáveis.
+    # Cada elemento contém (código FP8, valor numérico).
+    representable_values = []
+
+    for exponent in range(16):
+        for fraction in range(8):
+
+            # E4M3FN reserva 0x7F para NaN.
+            if exponent == 15 and fraction == 7:
+                continue
+
+            if exponent == 0:
+                # Zero e números subnormais.
+                number = fraction * (2 ** -9)
+            else:
+                # Números normais.
+                number = (
+                    1 + fraction / 8
+                ) * (2 ** (exponent - 7))
+
+            code = (exponent << 3) | fraction
+
+            representable_values.append((code, number))
+
+    result = []
+
+    for value in values:
+        number = float(value)
+
+        if math.isnan(number) or math.isinf(number):
+            result.append(float("nan"))
+            continue
+
+        if number == 0:
+            result.append(number)
+            continue
+
+        sign = -1.0 if number < 0 else 1.0
+        absolute = abs(number)
+
+        # Valores acima do maior finito não são representáveis.
+        if absolute > 448:
+            result.append(float("nan"))
+            continue
+
+        # Seleciona o valor representável mais próximo.
+        # Em empate, prefere o código par.
+        best_code, best_value = min(
+            representable_values,
+            key=lambda item: (
+                abs(absolute - item[1]),
+                item[0] & 1
+            )
+        )
+
+        result.append(sign * best_value)
 
     return result
 
@@ -351,18 +434,24 @@ def calculate_high_precision_metrics(
 # COMPARAÇÃO ENTRE FORMATOS NUMÉRICOS
 # ---------------------------------------------------------
 
-
 def compare_numeric_formats(
     values: Sequence[float],
     takum_widths=(8, 16, 32),
     ieee_widths=(16, 32),
+    include_fp8=True,
 ) -> dict:
     """
     Compara Takum e IEEE 754 utilizando Binary128 como referência.
 
+    Formatos avaliados por padrão:
+    - Takum T8, T16 e T32;
+    - IEEE FP8 E4M3FN;
+    - IEEE FP16;
+    - IEEE FP32.
+
     Todos os formatos são avaliados sobre o mesmo conjunto
     de amostras finitas, garantindo uma comparação justa.
-    
+
     Amostras que geram NaN ou infinito em qualquer formato
     são excluídas de todas as comparações.
     """
@@ -373,15 +462,19 @@ def compare_numeric_formats(
 
     measured_formats = {}
 
-    # Quantização Takum
+    # Quantização Takum.
     for width in takum_widths:
         name = f"Takum T{width}"
         measured_formats[name] = quantize_takum(values, width)
 
-    # Quantização IEEE 754
+    # Quantização IEEE FP16 e FP32.
     for width in ieee_widths:
         name = f"IEEE FP{width}"
         measured_formats[name] = quantize_ieee(values, width)
+
+    # Quantização IEEE FP8 E4M3FN.
+    if include_fp8:
+        measured_formats["IEEE FP8 E4M3FN"] = quantize_ieee_fp8(values)
 
     # Identifica as amostras válidas em todos os formatos.
     valid_indices = []
@@ -432,6 +525,9 @@ def compare_numeric_formats(
     return results
 
 
+# ---------------------------------------------------------
+# ARREDONDAMENTO BINARY128
+# ---------------------------------------------------------
 
 def _round_binary_ties_to_even(value):
     """Arredonda um valor positivo para o inteiro mais próximo, com empate par."""
@@ -452,6 +548,10 @@ def _round_binary_ties_to_even(value):
     return int(lower + 1)
 
 
+# ---------------------------------------------------------
+# QUANTIZAÇÃO IEEE 754 BINARY128
+# ---------------------------------------------------------
+
 def quantize_binary128(
     values: Sequence[float]
 ) -> list[mp.mpf]:
@@ -459,16 +559,16 @@ def quantize_binary128(
     Quantiza valores para IEEE 754 binary128.
 
     Parâmetros do formato:
-    - Precisão: 113 bits
-    - Expoente: 15 bits
-    - Bias: 16383
-    - Expoente normal mínimo: -16382
-    - Expoente normal máximo: 16383
-    - Menor subnormal positivo: 2**-16494
+    - Precisão: 113 bits;
+    - Expoente: 15 bits;
+    - Bias: 16383;
+    - Expoente normal mínimo: -16382;
+    - Expoente normal máximo: 16383;
+    - Menor subnormal positivo: 2**-16494.
 
     O arredondamento utilizado é round to nearest, ties to even.
 
-    Retorna valores mp.mpf que representam exatamente os valores
+    Retorna valores mp.mpf que representam os valores
     binary128 quantizados.
     """
 

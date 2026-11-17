@@ -4,6 +4,13 @@ from collections import Counter
 from .formats import normalize_width
 from .encoder import encode
 from .decoder import decode_to_float
+from .vector import (
+    vtadd_vv,
+    vtsub_vv,
+    vtmul_vv,
+    vtdot_vv,
+    vncvt_tt,
+)
 
 
 class VectorMachine:
@@ -17,7 +24,6 @@ class VectorMachine:
             f"v{i}": [] for i in range(num_registers)
         }
 
-        # Largura de cada registrador vetorial
         self.vreg_sew = {
             f"v{i}": None for i in range(num_registers)
         }
@@ -61,8 +67,6 @@ class VectorMachine:
             )
 
     def load_vector(self, register, values):
-        """Codifica valores reais e carrega um vetor."""
-
         self._validate_register(register)
 
         if len(values) < self.vl:
@@ -76,8 +80,6 @@ class VectorMachine:
         self.vreg_sew[register] = self.sew
 
     def load_raw(self, register, values):
-        """Carrega diretamente valores Takum codificados."""
-
         self._validate_register(register)
 
         if len(values) < self.vl:
@@ -93,14 +95,14 @@ class VectorMachine:
         self.vreg_sew[register] = self.sew
 
     def read_vector(self, register):
-        """Decodifica usando a largura armazenada no registrador."""
-
         self._validate_register(register)
 
         width = self.vreg_sew[register]
 
         if width is None:
-            raise ValueError(f"Registrador {register} ainda não foi carregado.")
+            raise ValueError(
+                f"Registrador {register} ainda não foi carregado."
+            )
 
         return [
             decode_to_float(value, width)
@@ -111,94 +113,67 @@ class VectorMachine:
         self._validate_register(register)
         return self.vregs[register].copy()
 
-    def _read_operands(self, vs1, vs2):
-        self._validate_vector(vs1, self.sew)
-        self._validate_vector(vs2, self.sew)
-
-        return (
-            self.read_vector(vs1)[:self.vl],
-            self.read_vector(vs2)[:self.vl]
-        )
-
-    def _write_results(self, vd, values):
-        self._validate_register(vd)
-
-        self.vregs[vd] = [
-            encode(float(value), self.sew)
-            for value in values
-        ]
-
-        self.vreg_sew[vd] = self.sew
-
     def _count_instruction(self, instruction):
         self.instret += 1
         self.instruction_count[instruction] += 1
 
     def execute(self, instruction, vd, vs1, vs2=None, dst_sew=None):
-        """Executa uma instrução da extensão Zvtakum."""
-
         self._validate_register(vd)
-        self._validate_register(vs1)
+        self._validate_vector(vs1)
 
         if instruction == "vncvt.t.t":
-            return self._execute_narrow(vd, vs1, dst_sew)
+            if dst_sew is None:
+                raise ValueError("Informe dst_sew para realizar a conversão.")
+
+            source_sew = self.vreg_sew[vs1]
+            dst_sew = normalize_width(dst_sew)
+
+            if dst_sew >= source_sew:
+                raise ValueError(
+                    "A conversão deve reduzir a largura dos elementos."
+                )
+
+            self.vregs[vd] = vncvt_tt(
+                self.vregs[vs1][:self.vl],
+                source_width=source_sew,
+                destination_width=dst_sew,
+            )
+
+            self.vreg_sew[vd] = dst_sew
+            self._count_instruction(instruction)
+
+            return self.read_vector(vd)
 
         if vs2 is None:
             raise ValueError(
                 f"A instrução {instruction} exige dois operandos."
             )
 
-        a, b = self._read_operands(vs1, vs2)
+        self._validate_vector(vs1, self.sew)
+        self._validate_vector(vs2, self.sew)
+
+        a = self.vregs[vs1][:self.vl]
+        b = self.vregs[vs2][:self.vl]
 
         if instruction == "vtadd.vv":
-            results = [x + y for x, y in zip(a, b)]
+            results = vtadd_vv(a, b, self.sew)
 
         elif instruction == "vtsub.vv":
-            results = [x - y for x, y in zip(a, b)]
+            results = vtsub_vv(a, b, self.sew)
 
         elif instruction == "vtmul.vv":
-            results = [x * y for x, y in zip(a, b)]
+            results = vtmul_vv(a, b, self.sew)
 
         elif instruction == "vtdot.vv":
-            result = sum(x * y for x, y in zip(a, b))
-            results = [result]
+            results = [vtdot_vv(a, b, self.sew)]
 
         else:
             raise ValueError(f"Instrução não suportada: {instruction}")
 
-        self._write_results(vd, results)
+        self.vregs[vd] = results
+        self.vreg_sew[vd] = self.sew
+
         self._count_instruction(instruction)
-
-        return self.read_vector(vd)
-
-    def _execute_narrow(self, vd, vs1, dst_sew):
-        """Converte um vetor para uma representação Takum menor."""
-
-        if dst_sew is None:
-            raise ValueError("Informe dst_sew para realizar a conversão.")
-
-        dst_sew = normalize_width(dst_sew)
-
-        self._validate_vector(vs1)
-
-        source_sew = self.vreg_sew[vs1]
-
-        if dst_sew >= source_sew:
-            raise ValueError(
-                "A conversão deve reduzir a largura dos elementos."
-            )
-
-        source_values = self.read_vector(vs1)
-
-        converted = [
-            encode(value, dst_sew)
-            for value in source_values[:self.vl]
-        ]
-
-        self.vregs[vd] = converted
-        self.vreg_sew[vd] = dst_sew
-
-        self._count_instruction("vncvt.t.t")
 
         return self.read_vector(vd)
 

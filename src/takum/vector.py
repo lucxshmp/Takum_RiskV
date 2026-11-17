@@ -13,7 +13,9 @@ Observação:
 Este módulo simula as operações em Python. Não implementa instruções
 de hardware RISC-V ou uma extensão RVV real.
 """
+import mpmath as mp
 
+from .metrics import quantize_binary128
 from typing import Iterable, List, Optional
 
 from .alu import takum_add, takum_sub, takum_mul
@@ -78,30 +80,42 @@ def vtdot_vv(
     fmt: TakumFormat
 ) -> int:
     """
-    Calcula o produto escalar de dois vetores.
+    Calcula o produto escalar com acumulação em IEEE Binary128.
 
-    Os elementos são decodificados, multiplicados e acumulados
-    em ponto flutuante Python. O resultado é codificado uma vez
-    ao final da operação.
+    Os elementos Takum são decodificados, multiplicados e
+    acumulados com precisão de 113 bits.
+
+    O resultado é convertido para Takum somente ao final.
     """
     _check_vector_sizes(a, b)
 
-    accumulator = 0.0
+    accumulator = mp.mpf(0)
 
-    for x, y in zip(a, b):
-        value_x = decode(x, fmt).value
-        value_y = decode(y, fmt).value
+    with mp.workprec(256):
 
-        if value_x is None or value_y is None:
-            raise ValueError(
-                "Não é possível calcular o produto escalar "
-                "com elementos NaR."
-            )
+        for x, y in zip(a, b):
+            value_x = decode(x, fmt).value
+            value_y = decode(y, fmt).value
 
-        accumulator += value_x * value_y
+            if value_x is None or value_y is None:
+                raise ValueError(
+                    "Não é possível calcular o produto escalar "
+                    "com elementos NaR."
+                )
 
-    return encode(accumulator, fmt)
+            # Multiplicação em precisão ampliada.
+            product = mp.mpf(value_x) * mp.mpf(value_y)
 
+            # Quantiza o produto para Binary128.
+            product = quantize_binary128([product])[0]
+
+            # Acumula e quantiza novamente para Binary128.
+            accumulator = quantize_binary128(
+                [accumulator + product]
+            )[0]
+
+    # Converte o resultado para o formato Takum de destino.
+    return encode(float(accumulator), fmt)
 def vncvt_tt(
     values: List[int],
     source_fmt: Optional[TakumFormat] = None,

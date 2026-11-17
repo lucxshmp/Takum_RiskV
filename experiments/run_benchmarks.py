@@ -9,7 +9,6 @@ from src.benchmarks.matrix_vector import csr_matvec
 from src.benchmarks.metrics import error_metrics
 
 def main():
-    # Exemplo CSR: [[1,0,2],[0,3,0],[4,0,5]]
     values = [1.0, 2.0, 3.0, 4.0, 5.0]
     cols = [0, 2, 1, 0, 2]
     row_ptr = [0, 2, 3, 5]

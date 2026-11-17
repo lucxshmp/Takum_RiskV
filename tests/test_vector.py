@@ -50,16 +50,26 @@ def test_vector_multiplication(width):
     assert len(result) == 2
 
 
-@pytest.mark.parametrize("width", [8, 16, 32])
-def test_dot_product(width):
+@pytest.mark.parametrize(
+    "width, tolerance",
+    [
+        (8, 0.30),
+        (16, 0.01),
+        (32, 0.001),
+    ],
+)
+def test_dot_product(width, tolerance):
     a = encode_vector([1.0, 2.0, 3.0], width)
     b = encode_vector([4.0, 5.0, 6.0], width)
 
     result = vtdot_vv(a, b, width)
 
-    assert decode_to_float(result, width) > 0
+    decoded_result = decode_to_float(result, width)
 
-
+    assert decoded_result == pytest.approx(
+        32.0,
+        rel=tolerance,
+    )
 def test_vector_size_mismatch():
     a = encode_vector([1.0, 2.0], 16)
     b = encode_vector([3.0], 16)

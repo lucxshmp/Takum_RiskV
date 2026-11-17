@@ -15,7 +15,7 @@ from src.takum.metrics import (
     quantize_ieee,
     calculate_high_precision_metrics,
     compare_numeric_formats,
-    quantize_binary128
+    quantize_binary128,
 )
 
 
@@ -49,6 +49,7 @@ def test_mean_relative_error():
     measured = [1.1, 2.2, 4.0]
 
     assert mean_relative_error(reference, measured) == pytest.approx(0.0666666667)
+
 
 def test_calculate_metrics():
     reference = [1.0, 2.0, 3.0]
@@ -141,10 +142,7 @@ def test_high_precision_metrics():
     reference = high_precision_reference([1.0, 2.0, 3.0])
     measured = [1.0, 2.1, 3.0]
 
-    metrics = calculate_high_precision_metrics(
-        reference,
-        measured
-    )
+    metrics = calculate_high_precision_metrics(reference, measured)
 
     assert metrics["samples"] == 3
     assert metrics["mae"] == pytest.approx(0.1 / 3)
@@ -155,10 +153,7 @@ def test_high_precision_metrics_percentiles():
     reference = high_precision_reference([1, 2, 3, 4, 5])
     measured = [1.1, 2.2, 3.3, 4.4, 5.5]
 
-    metrics = calculate_high_precision_metrics(
-        reference,
-        measured
-    )
+    metrics = calculate_high_precision_metrics(reference, measured)
 
     assert metrics["median_relative_error"] > 0
     assert metrics["p95_relative_error"] > 0
@@ -184,13 +179,14 @@ def test_high_precision_metrics_size_mismatch():
 # ---------------------------------------------------------
 
 def test_compare_numeric_formats():
-    values = [0.5, 1.0, 2.0, 4.0]
+    values = [0.1, 1.0, 10.0]
 
     results = compare_numeric_formats(values)
 
     assert "Takum T8" in results
     assert "Takum T16" in results
     assert "Takum T32" in results
+    assert "IEEE FP8 E4M3FN" in results
     assert "IEEE FP16" in results
     assert "IEEE FP32" in results
 
@@ -206,7 +202,8 @@ def test_compare_numeric_formats_custom_widths():
     results = compare_numeric_formats(
         values,
         takum_widths=(8, 16),
-        ieee_widths=(32,)
+        ieee_widths=(32,),
+        include_fp8=False,
     )
 
     assert len(results) == 3
@@ -231,12 +228,12 @@ def test_decode_vector():
 
     decoded = decode_vector(encoded, 16)
 
-    assert decoded == pytest.approx(
-        values,
-        rel=0.002
-    )
+    assert decoded == pytest.approx(values, rel=0.002)
 
 
+# ---------------------------------------------------------
+# TESTES IEEE BINARY128
+# ---------------------------------------------------------
 
 def test_binary128_basic_values():
     values = [1.0, -2.5, 0.0]
@@ -258,6 +255,7 @@ def test_binary128_precision():
 
         assert result[0] != mp.mpf("1.1")
         assert error < mp.mpf("1e-33")
+
 
 def test_binary128_subnormal():
     with mp.workprec(256):
