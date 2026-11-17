@@ -1,70 +1,88 @@
-# Takum_RiskV
+# Takum-RVV — scaffold inicial
 
-Projeto da disciplina deArquitetura e Organização de Computadores desenvolvido por Gabriel Lopes, Lucas Petronilho e Kauan Valente.
+Projeto Integrador AOC/UFMG — 2026/02.
 
-A ideia principal é usar o formato de número Takum no lugar do formato padrão (IEEE 754) nas instruções vetoriais do RISC-V. As novas instruções formam a extensão Zvtakum.
+Este repositório é um **ponto de partida executável**, não uma implementação concluída do Takum-RVV.
 
-Esta é a primeira entrega (até a semana 4). O código é um simulador em Python: ele mostra o resultado de cada instrução, sem simular o hardware
+## Decisão de escopo
 
-## ARQUIVOS
+O artigo preliminar do grupo descreve a variante **logarítmica (LNS)** do Takum. Este scaffold mantém essa escolha explícita. Não misture as equações da variante logarítmica com as da variante linear.
 
+A referência formal principal para o codec é Hunhold, *Design and Implementation of a Takum Arithmetic Hardware Codec in VHDL*, arXiv:2408.10594. A definição distingue Takum logarítmico e linear. Antes de declarar T8/T16/T32 conformes, é necessário terminar a validação das regras de ghost bits e comparar com uma implementação de referência.
+
+## O que já está implementado neste scaffold
+
+- Estrutura modular Python.
+- Tipos básicos e validação de largura.
+- Decodificação da estrutura dos campos para larguras em que a partição `S|D|R|C|M` cabe sem ambiguidade.
+- Representação interna de valor logarítmico.
+- Interface inicial de ALU, simulador vetorial e benchmark.
+- Testes iniciais e comandos de execução.
+
+## O que NÃO está concluído
+
+- Codificador Takum validado.
+- Decodificação T8 para todos os regimes/ghost bits.
+- Aritmética Takum arredondada corretamente para T8/T16/T32.
+- Instruções Zvtakum integradas a um simulador RVV real.
+- Referência Float128 e resultados experimentais finais.
+
+As rotinas não concluídas lançam `NotImplementedError` intencionalmente. Não substitua isso por aproximações silenciosas: isso produziria resultados acadêmicos inválidos.
+
+## Instalação
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
-takum.py       # converte entre número comum e Takum
-alu.py         # soma, subtração, multiplicação, produto escalar e conversão
-vm.py          # instruções vetoriais e contador de instruções
-test_takum.py  # testes do takum.py
-test_alu.py    # testes do alu.py
-test_vm.py     # testes do vm.py
+
+## Testes
+
+```bash
+python -m pytest -q
 ```
 
-## TAKUM
+## Próxima etapa recomendada
 
-O Takum existe em 3 tamanhos: T8, T16 e T32, os bits são divididos assim:
+Validar, com a publicação formal e uma implementação de referência, a extensão da decodificação para T8 e os padrões especiais. Depois disso, implementar e testar o encoder antes da ALU.
 
-```
-| S | D |  R  |   C   |      F      |
-```
+## Estrutura
 
-- `S`: sinal (positivo ou negativo)
-- `D`: indica se o valor é maior ou menor que 1
-- `R`: diz quantos bits tem o `C`
-- `C`: parte do expoente
-- `F`: parte decimal do número
+- `src/takum`: formato, decodificador e codificador.
+- `src/arithmetic`: ALU.
+- `src/vector`: abstração de registradores e instruções vetoriais.
+- `src/benchmarks`: matriz-vetor e métricas.
+- `experiments`: execução e gráficos.
+- `tests`: testes unitários iniciais.
+- `docs`: notas técnicas do projeto.
+cat >> README.md <<'EOF'
 
-Casos especiais:
-- Tudo zero = o número 0
-- Só o primeiro bit igual a 1 = NaR 
+---
 
-## CÓDIGO
+# Experimental Evaluation
 
-**takum.py**
-- `split_fields`: separa os campos do número
-- `decode`: transforma Takum em número comum
-- `encode`: transforma número comum em Takum. Arredonda para o valor mais próximo. Se o número for grande ou pequeno demais, usa o maior ou o menor valor possível.
+## 1. Overview
 
-**alu.py**
-- `t_add`, `t_sub`, `t_mul`: somar, subtrair e multiplicar
-- `t_dot`: produto escalar de duas listas
-- `t_cvt`: troca o tamanho do número
+The project implements a software model of Takum arithmetic and a
+simplified RISC-V Vector Extension (RVV) simulator.
 
-Se um dos números for NaR, o resultado também é NaR.
+The numerical evaluation compares the representation accuracy of:
 
-**vm.py**: as instruções vetoriais do enunciado, que fazem a operação em todos os elementos da lista de uma vez. Também conta quantas instruções foram usadas.
+- Takum T8
+- Takum T16
+- Takum T32
+- IEEE 754 FP16
+- IEEE 754 FP32
 
-`vtadd.vv` = soma
-`vtsub.vv` = subtração
-`vtmul.vv` = multiplicação
-`vtdot.vv` = produto escalar 
-`vncvt.t.t` = reduz o tamanho 
+IEEE 754 Binary128 is used as the high-precision reference.
 
-## TESTES
+The current experiments evaluate numerical representation error.
+They do not represent hardware execution time or actual RVV performance.
 
-- `test_takum.py`: testa a conversão de e para Takum
-- `test_alu.py`: testa as operações em T8, T16 e T32
-- `test_vm.py`: testa as instruções vetoriais e o contador
+## 2. Running the Tests
 
-Para rodar todos os testes:
+Run the complete test suite from the project root:
 
-```
-python -m unittest -v
-```
+```bash
+PYTHONPATH=src python3 -m pytest tests/ -v
