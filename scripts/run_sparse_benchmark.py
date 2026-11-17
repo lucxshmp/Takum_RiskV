@@ -2,9 +2,13 @@
 import csv
 import math
 import random
+import sys
 from pathlib import Path
 
 import mpmath as mp
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from takum.csr import CSRMatrix, spmv_takum, decode_result
 from takum.metrics import calculate_high_precision_metrics
@@ -16,7 +20,7 @@ N = 128
 DENSITY = 0.05
 WIDTHS = [8, 16, 32]
 
-OUTPUT_DIR = Path("results")
+OUTPUT_DIR = PROJECT_ROOT / "results"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 

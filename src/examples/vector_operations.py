@@ -1,5 +1,5 @@
 
-from src.takum import (
+from takum import (
     encode,
     decode_to_float,
     vtadd_vv,

@@ -1,88 +1,103 @@
-# Takum-RVV — scaffold inicial
+# Takum-RVV
 
-Projeto Integrador AOC/UFMG — 2026/02.
+**Projeto Integrador — Arquitetura e Organização de Computadores (AOC/UFMG) — 2026/02**
 
-Este repositório é um **ponto de partida executável**, não uma implementação concluída do Takum-RVV.
+Simulador funcional em Python da aritmética **Takum logarítmica** (T8, T16 e T32) e de uma extensão vetorial experimental para RISC-V, a **Zvtakum**. O projeto compara o erro numérico do Takum com FP8 (E4M3FN), FP16 e FP32, sempre usando Binary128 como referência, e executa uma multiplicação matriz–vetor esparsa (SpMV) em formato CSR.
 
-## Decisão de escopo
+> **Escopo.** Os resultados são de simulação em software. Os tempos medidos são de Python, e não de hardware; não há medição de ciclos, área ou energia. As instruções Zvtakum são uma proposta do grupo e não fazem parte da especificação RVV.
 
-O artigo preliminar do grupo descreve a variante **logarítmica (LNS)** do Takum. Este scaffold mantém essa escolha explícita. Não misture as equações da variante logarítmica com as da variante linear.
+## Variante adotada
 
-A referência formal principal para o codec é Hunhold, *Design and Implementation of a Takum Arithmetic Hardware Codec in VHDL*, arXiv:2408.10594. A definição distingue Takum logarítmico e linear. Antes de declarar T8/T16/T32 conformes, é necessário terminar a validação das regras de ghost bits e comparar com uma implementação de referência.
+Usa-se a variante **logarítmica (LNS)** do Takum, conforme Hunhold, *Design and Implementation of a Takum Arithmetic Hardware Codec in VHDL* (arXiv:2408.10594). Não misture as equações das variantes logarítmica e linear. Para larguras menores que 12 bits (T8), a palavra é completada com *ghost bits* antes da extração dos campos.
 
-## O que já está implementado neste scaffold
+### Limitação conhecida do decodificador
 
-- Estrutura modular Python.
-- Tipos básicos e validação de largura.
-- Decodificação da estrutura dos campos para larguras em que a partição `S|D|R|C|M` cabe sem ambiguidade.
-- Representação interna de valor logarítmico.
-- Interface inicial de ALU, simulador vetorial e benchmark.
-- Testes iniciais e comandos de execução.
+O decodificador calcula a magnitude como `exp(ℓ/e)`, enquanto a definição formal prevê `(√e)^ℓ = exp(ℓ/2)`. A estrutura dos campos (`S|D|R|C|M`) é a mesma, mas os valores **não coincidem bit a bit** com a referência de Hunhold. Os erros e a faixa dinâmica reportados referem-se ao codec como implementado. Além disso, o codificador arredonda para o valor mais próximo no domínio real e pode devolver zero, enquanto o codec de referência nunca converte um valor não nulo em zero.
 
-## O que NÃO está concluído
+## Estrutura
 
-- Codificador Takum validado.
-- Decodificação T8 para todos os regimes/ghost bits.
-- Aritmética Takum arredondada corretamente para T8/T16/T32.
-- Instruções Zvtakum integradas a um simulador RVV real.
-- Referência Float128 e resultados experimentais finais.
+```text
+src/takum/
+  formats.py     tipos, larguras, classes (zero, NaR, finito)
+  decoder.py     decodificador Takum LNS
+  encoder.py     codificador (busca exaustiva, escolhida por ser simples de verificar)
+  alu.py         soma, subtração, multiplicação e divisão (um arredondamento por operação)
+  vector.py      vtadd.vv, vtsub.vv, vtmul.vv, vtdot.vv, vncvt.t.t
+  simulator.py   VectorMachine: 32 registradores, VL <= 256, SEW em {8, 16, 32}, contador de instruções
+  csr.py         matriz CSR e SpMV (referência Binary128 e versão Takum)
+  metrics.py     métricas de erro e conversão para FP8/FP16/FP32/Binary128
+  benchmark.py   benchmark das instruções vetoriais
+src/examples/    exemplo de uso das instruções vetoriais
+scripts/         experimentos e gráficos
+results/         CSVs gerados e results/figures/
+tests/           testes unitários
+```
 
-As rotinas não concluídas lançam `NotImplementedError` intencionalmente. Não substitua isso por aproximações silenciosas: isso produziria resultados acadêmicos inválidos.
+## Instruções Zvtakum
+
+| Instrução | Operação | RVV equivalente |
+|---|---|---|
+| `vtadd.vv` | soma elemento a elemento | `vfadd.vv` |
+| `vtsub.vv` | subtração elemento a elemento | `vfsub.vv` |
+| `vtmul.vv` | multiplicação elemento a elemento | `vfmul.vv` |
+| `vtdot.vv` | produto escalar, com acúmulo em Binary128 | `vfdot.*` |
+| `vncvt.t.t` | redução de largura (por exemplo T16 → T8) | `vfncvt.*` |
+
+O SEW escolhe o formato (8 → T8, 16 → T16, 32 → T32). Cada registrador lembra a largura do que guarda, e operações com larguras incompatíveis são recusadas.
 
 ## Instalação
 
 ```bash
+git clone https://github.com/lucxshmp/Takum_RiskV.git
+cd Takum_RiskV
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate        # Windows (PowerShell): .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
 ## Testes
 
+O `pytest.ini` já configura `pythonpath = src`, então basta, a partir da raiz:
+
 ```bash
 python -m pytest -q
 ```
 
-## Próxima etapa recomendada
+## Experimentos
 
-Validar, com a publicação formal e uma implementação de referência, a extensão da decodificação para T8 e os padrões especiais. Depois disso, implementar e testar o encoder antes da ALU.
-
-## Estrutura
-
-- `src/takum`: formato, decodificador e codificador.
-- `src/arithmetic`: ALU.
-- `src/vector`: abstração de registradores e instruções vetoriais.
-- `src/benchmarks`: matriz-vetor e métricas.
-- `experiments`: execução e gráficos.
-- `tests`: testes unitários iniciais.
-- `docs`: notas técnicas do projeto.
-cat >> README.md <<'EOF'
-
----
-
-# Experimental Evaluation
-
-## 1. Overview
-
-The project implements a software model of Takum arithmetic and a
-simplified RISC-V Vector Extension (RVV) simulator.
-
-The numerical evaluation compares the representation accuracy of:
-
-- Takum T8
-- Takum T16
-- Takum T32
-- IEEE 754 FP16
-- IEEE 754 FP32
-
-IEEE 754 Binary128 is used as the high-precision reference.
-
-The current experiments evaluate numerical representation error.
-They do not represent hardware execution time or actual RVV performance.
-
-## 2. Running the Tests
-
-Run the complete test suite from the project root:
+Todos os comandos rodam a partir da raiz e gravam em `results/`:
 
 ```bash
-PYTHONPATH=src python3 -m pytest tests/ -v
+python scripts/run_format_comparison.py   # precisão: near_zero, moderate_values, random_magnitudes
+python scripts/run_vector_benchmark.py    # benchmark vetorial (VL=8, T8/T16/T32)
+python scripts/run_sparse_benchmark.py    # SpMV 128x128, 5% de densidade, semente 42
+python scripts/plot_results.py            # gera results/figures/*.png (requer pandas)
+```
+
+Conjuntos de 1000 valores com semente fixa: `near_zero` (uniforme em ±1e-10, semente 42), `moderate_values` (uniforme em ±100, semente 43) e `random_magnitudes` (`m·10^k`, `k` inteiro em [-10, 10], semente 44). Se algum formato produz NaN ou infinito para uma amostra, ela é excluída de todos os formatos. No conjunto `random_magnitudes` isso remove as amostras com |x| > 448 (limite do FP8 E4M3FN), de modo que a comparação cobre cerca de 15 ordens de grandeza, e não as 21 do gerador.
+
+### Erro relativo médio (referência Binary128)
+
+| Formato | Próximos de zero | Moderados | Magnitudes variadas |
+|---|---|---|---|
+| Takum T8 | 4,9e-1 | 8,4e-2 | 2,3e-1 |
+| Takum T16 | 2,7e-3 | 3,3e-4 | 9,8e-4 |
+| Takum T32 | 4,0e-8 | 5,1e-9 | 1,5e-8 |
+| FP8 E4M3FN | 1,0 | 2,3e-2 | 6,0e-1 |
+| FP16 | 1,0 | 1,7e-4 | 2,8e-1 |
+| FP32 | 2,1e-8 | 2,1e-8 | 2,1e-8 |
+
+Para valores muito pequenos, FP8 e FP16 perdem toda a informação; para magnitudes moderadas, FP8 e FP16 têm menor erro que T8 e T16.
+
+## Limitações
+
+- O decodificador usa `exp(ℓ/e)` (ver acima), e os testes comparam com uma referência que usa as mesmas equações: eles mostram consistência interna, não equivalência com o VHDL de Hunhold.
+- A ALU opera em ponto flutuante de 64 bits e arredonda ao final; não foi validada contra RTL.
+- A SpMV foi avaliada só em Takum, acumula em Takum (não usa `vtdot.vv`) e não roda no `VectorMachine`.
+- Uma única matriz (semente 42) e uma repetição no benchmark vetorial, sem barras de erro nos tempos.
+
+## Referências
+
+- L. Hunhold, *Design and Implementation of a Takum Arithmetic Hardware Codec in VHDL*, arXiv:2408.10594.
+- L. Hunhold, *Beating Posits at Their Own Game: Takum Arithmetic*, CoNGA 2024.
+- IEEE Std 754-2008, *IEEE Standard for Floating-Point Arithmetic*.
